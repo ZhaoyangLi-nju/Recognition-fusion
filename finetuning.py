@@ -96,10 +96,10 @@ def main():
 
     for epoch in range(cfg.START_EPOCH,cfg.EPOCHS+1 ):
         adjust_learning_rate(optimizer, epoch)
-        # mean_acc=validate(val_loader,model,criterion,generate_model,epoch)
+        # mean_acc=validate(val_loader,model,criterion,generate_model,epoch,writer)
 
         train(train_loader,model,criterion,generate_model,optimizer,epoch,writer)
-        mean_acc=validate(val_loader,model,criterion,generate_model,epoch)
+        mean_acc=validate(val_loader,model,criterion,generate_model,epoch,writer)
         if mean_acc>best_mean:
             best_mean=mean_acc
             print('best mean accuracy:',best_mean)
@@ -147,7 +147,7 @@ def train(train_loader,model,criterion,generate_model,optimizer,epoch,writer):
 
 
 
-def validate(val_loader,model,criterion,generate_model,epoch):
+def validate(val_loader,model,criterion,generate_model,epoch,writer):
     losses = AverageMeter()
     top1 = AverageMeter()
     top5 = AverageMeter()
