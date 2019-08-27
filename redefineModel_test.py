@@ -70,8 +70,8 @@ class ReD_Model(nn.Module):
 		# self.net_classification_2=resnet18(pretrained=False)
 		# num_ftrs = self.net_classification_2.fc.in_features
 		# self.net_classification_2.fc = nn.Linear(num_ftrs, self.cfg.NUM_CLASSES)
-		print(("=> loading checkpoint '{}'".format('/home/lzy/generateDepth/Depth_model_best.pth.tar')))
-		checkpoint = torch.load('depth_best.pth.tar')
+		print(("=> loading checkpoint '{}'".format('Depth_model_best.pth.tar')))
+		checkpoint = torch.load('/home/lzy/generateDepth/depth_best.pth.tar')
 		best_mean_depth = checkpoint['best_mean_2']
 		for k, v in checkpoint['state_dict'].items():
 		    name = k[7:]
