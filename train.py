@@ -41,12 +41,12 @@ def main():
     # args for different backbones
     cfg.parse(args['resnet18'])
     run_id = random.randint(1, 100000)
-    summary_dir='/home/lzy/summary/generateDepth/'+'train_depth_pretrain_'+str(run_id)
+    summary_dir='/home/lzy/summary/generateDepth/'+'train_2branch_'+str(run_id)
     if not os.path.exists(summary_dir):
         os.mkdir(summary_dir)
     writer = SummaryWriter(summary_dir)
     cfg.LR=0.0001
-    os.environ["CUDA_VISIBLE_DEVICES"] = '2,3'
+    os.environ["CUDA_VISIBLE_DEVICES"] = '0,1,2,3'
     device_ids = torch.cuda.device_count()
     print('device_ids:', device_ids)
     # project_name = reduce(lambda x, y: str(x) + '/' + str(y), os.path.realpath(__file__).split(os.sep)[:-1])
@@ -75,7 +75,7 @@ def main():
     # val_loader = torch.utils.data.DataLoader(
     #     val_dataset,batch_size=16, shuffle=False,
     #     num_workers=4, pin_memory=True)
-    train_loader = DataProvider(cfg, dataset=train_dataset,batch_size=36, shuffle=True)
+    train_loader = DataProvider(cfg, dataset=train_dataset,batch_size=50, shuffle=True)
     val_loader = DataProvider(cfg, dataset=val_dataset, batch_size=10,shuffle=False)
 
     # class weights
@@ -89,23 +89,24 @@ def main():
 
     # net_classification_1 = models.__dict__['resnet18'](num_classes=365)
     # net_classification_2 = models.__dict__['resnet18'](num_classes=365)
-    # net_classification_1=torch.hub.load('facebookresearch/WSL-Images', 'resnext101_32x16d_wsl')
+    net_classification_1=torch.hub.load('facebookresearch/WSL-Images', 'resnext101_32x16d_wsl')
     net_classification_2=torch.hub.load('facebookresearch/WSL-Images', 'resnext101_32x16d_wsl')
     # for param in net_classification_1.parameters():
     #     param.requires_grad = False
     # for param in net_classification_2.parameters():
     #     param.requires_grad = True
-    # net_classification_1.fc = nn.Sequential(nn.Dropout(p=0.5),nn.Linear(2048, 1024),nn.LeakyReLU(inplace=True),nn.Linear(1024,67),nn.Softmax(dim=1))
-    net_classification_2.fc = nn.Sequential(nn.Dropout(p=0.5),nn.Linear(2048, 1024),nn.LeakyReLU(inplace=True),nn.Linear(1024,67),nn.Softmax(dim=1))
+    net_classification_1.fc = nn.Sequential(nn.Dropout(p=0.5),nn.Linear(2048, 1024),nn.LeakyReLU(inplace=True),nn.Linear(1024,67))
+    net_classification_2.fc = nn.Sequential(nn.Dropout(p=0.5),nn.Linear(2048, 1024),nn.LeakyReLU(inplace=True),nn.Linear(1024,67))
 
-    # net_classification_1.load_state_dict(torch.load("./bestmodel/best_model_resnext_16d_2048_1024_dropout_0.5_b.pkl"))
-    net_classification_2.load_state_dict(torch.load("./bestmodel/best_model_resnext_16d_2048_1024_dropout_0.5_b.pkl"))
+    net_classification_1.load_state_dict(torch.load("./bestmodel/best_model_resnext_16d_2048_1024_dropout_0.5_b.pkl"))
+    # net_classification_2.load_state_dict(torch.load("./bestmodel/best_model_resnext_16d_2048_1024_dropout_0.5_b.pkl"))
     # net_classification_2
     # load_path = "/home/dudapeng/workspace/pretrained/place/resnet18_places365.pth"
     # checkpoint = torch.load(load_path, map_location=lambda storage, loc: storage)
     # state_dict = {str.replace(k, 'module.', ''): v for k, v in checkpoint['state_dict'].items()}
     # net_classification_1.load_state_dict(state_dict)
     # net_classification_2.load_state_dict(state_dict)
+    print(net_classification_1)
 
 
 
@@ -116,7 +117,7 @@ def main():
     # net_classification_2.fc = nn.Linear(num_ftrs, cfg.NUM_CLASSES)
 
 
-    # net_classification_1.cuda()
+    net_classification_1.cuda()
     net_classification_2.cuda()
     cudnn.benchmark = True
 
@@ -132,42 +133,42 @@ def main():
         generate_model = torch.nn.DataParallel(model).cuda()
         generate_model.eval()
 
-    # net_classification_1 = torch.nn.DataParallel(net_classification_1).cuda()
+    net_classification_1 = torch.nn.DataParallel(net_classification_1).cuda()
     net_classification_2 = torch.nn.DataParallel(net_classification_2).cuda()
     criterion = nn.CrossEntropyLoss().cuda()
 
-    # best_mean_1=0
+    best_mean_1=0
     best_mean_2=0
     # optimizer = optim.SGD(model_ft.parameters(), lr=0.05,momentum=0.9)#,weight_decay=0.00005)
-    # optimizer_1 = torch.optim.SGD(net_classification_1.parameters(),lr=cfg.LR,momentum=cfg.MOMENTUM,weight_decay=cfg.WEIGHT_DECAY)
+    optimizer_1 = torch.optim.SGD(net_classification_1.parameters(),lr=cfg.LR,momentum=cfg.MOMENTUM,weight_decay=cfg.WEIGHT_DECAY)
     optimizer_2 = torch.optim.SGD(net_classification_2.parameters(),lr=cfg.LR,momentum=cfg.MOMENTUM,weight_decay=cfg.WEIGHT_DECAY)
     for epoch in range(0,100):
-        adjust_learning_rate(optimizer_2,epoch)
+        adjust_learning_rate(optimizer_1,optimizer_2,epoch)
         # meanacc_1,meanacc_2=validate(val_loader, net_classification_1,net_classification_2,generate_model,criterion,epoch)
 # 
-        # train(train_loader, net_classification_1,net_classification_2,generate_model,criterion,optimizer_1,optimizer_2,epoch,writer)
-        # meanacc_1,meanacc_2=validate(val_loader, net_classification_1,net_classification_2,generate_model,criterion,epoch,writer)
+        train(train_loader, net_classification_1,net_classification_2,generate_model,criterion,optimizer_1,optimizer_2,epoch,writer)
+        meanacc_1,meanacc_2=validate(val_loader, net_classification_1,net_classification_2,generate_model,criterion,epoch,writer)
         # meanacc_2=validate(val_loader,net_classification_2,generate_model,criterion,epoch,writer)
 
-        train(train_loader,net_classification_2,generate_model,criterion,optimizer_2,epoch,writer)
-        meanacc_2=validate(val_loader,net_classification_2,generate_model,criterion,epoch,writer)
+        # train(train_loader,net_classification_2,generate_model,criterion,optimizer_2,epoch,writer)
+        # meanacc_2=validate(val_loader,net_classification_2,generate_model,criterion,epoch,writer)
 
 
 
 
 
         # writer.add_image(depth_image[0])
-        #save best
-        # if meanacc_1>best_mean_1:
-        #     best_mean_1=meanacc_1
-        #     print('best_mean_color:',str(best_mean_1))
-        #     save_checkpoint({
-        #         'epoch': epoch,
-        #         'arch': cfg.ARCH,
-        #         'state_dict': net_classification_1.state_dict(),
-        #         'best_mean_1': best_mean_1,
-        #         'optimizer' : optimizer_1.state_dict(),
-        #     },CorD=True)
+        # save best
+        if meanacc_1>best_mean_1:
+            best_mean_1=meanacc_1
+            print('best_mean_color:',str(best_mean_1))
+            save_checkpoint({
+                'epoch': epoch,
+                'arch': cfg.ARCH,
+                'state_dict': net_classification_1.state_dict(),
+                'best_mean_1': best_mean_1,
+                'optimizer' : optimizer_1.state_dict(),
+            },CorD=True)
 
         if meanacc_2>best_mean_2:
             best_mean_2=meanacc_2
@@ -179,10 +180,10 @@ def main():
                 'best_mean_2': best_mean_2,
                 'optimizer' : optimizer_2.state_dict(),
             },CorD=False)
-        # print('best_mean_color:',str(best_mean_1))
-        # writer.add_scalar('mean_acc_color', meanacc_1, global_step=epoch)
+        print('best_mean_color:',str(best_mean_1))
+        writer.add_scalar('mean_acc_color', meanacc_1, global_step=epoch)
         writer.add_scalar('mean_acc_depth', meanacc_2, global_step=epoch)
-        # writer.add_scalar('best_meanacc_color', best_mean_1, global_step=epoch)
+        writer.add_scalar('best_meanacc_color', best_mean_1, global_step=epoch)
         writer.add_scalar('best_meanacc_depth', best_mean_2, global_step=epoch)
 
 
@@ -192,10 +193,10 @@ def main():
 
 
 
-def train(train_loader,net_classification_2,generate_model,criterion,optimizer_2,epoch,writer):
-    # losses_1 = AverageMeter()
+def train(train_loader,net_classification_1,net_classification_2,generate_model,criterion,optimizer_1,optimizer_2,epoch,writer):
+    losses_1 = AverageMeter()
     losses_2 = AverageMeter()
-    # net_classification_1.train()
+    net_classification_1.train()
     net_classification_2.train()
     generate_model.eval()
     for i, (input,target) in enumerate(train_loader):
@@ -213,13 +214,13 @@ def train(train_loader,net_classification_2,generate_model,criterion,optimizer_2
         depth_var = torch.autograd.Variable(depth_image)
         
         #classification_1
-        # feature_1 = net_classification_1(input_var)
-        # loss_1 = criterion(feature_1, target)
-        # losses_1.update(loss_1.item(), input.size(0))
-        # optimizer_1.zero_grad()
-        # loss_1.backward()
-        # optimizer_1.step()
-        #classification_2
+        feature_1 = net_classification_1(input_var)
+        loss_1 = criterion(feature_1, target)
+        losses_1.update(loss_1.item(), input.size(0))
+        optimizer_1.zero_grad()
+        loss_1.backward()
+        optimizer_1.step()
+        # classification_2
         feature_2 = net_classification_2(depth_var)
         loss_2 = criterion(feature_2,target)
         losses_2.update(loss_2.item(), input.size(0))
@@ -228,27 +229,27 @@ def train(train_loader,net_classification_2,generate_model,criterion,optimizer_2
         optimizer_2.step()
         if i % 40 == 0:
             print('Epoch: [{0}][{1}]\t'
-            # 'Loss_color {loss_1.val:.4f} ({loss_1.avg:.4f})\t'
+            'Loss_color {loss_1.val:.4f} ({loss_1.avg:.4f})\t'
             'Loss_depth {loss_2.val:.4f} ({loss_2.avg:.4f})\t'.format(
-               epoch, i,loss_2=losses_2))
-    # writer.add_scalar('train_loss_color', losses_1.avg, global_step=epoch)
+               epoch, i,loss_1=losses_1,loss_2=losses_2))
+    writer.add_scalar('train_loss_color', losses_1.avg, global_step=epoch)
     writer.add_scalar('train_loss_depth', losses_2.avg, global_step=epoch)
     writer.add_scalar('LR',cfg.LR,global_step=epoch)
 
-def validate(val_loader,net_classification_2,generate_model,criterion,epoch,writer):
-    # losses_1 = AverageMeter()
-    # top1_1 = AverageMeter()
-    # top5_1 = AverageMeter()
+def validate(val_loader,net_classification_1,net_classification_2,generate_model,criterion,epoch,writer):
+    losses_1 = AverageMeter()
+    top1_1 = AverageMeter()
+    top5_1 = AverageMeter()
     losses_2 = AverageMeter()
     top1_2 = AverageMeter()
     top5_2 = AverageMeter()
     # switch to evaluate mode
-    # net_classification_1.eval()
+    net_classification_1.eval()
     net_classification_2.eval()
     generate_model.eval()
 
-    # pred_mean_1=[]
-    # target_mean_1=[]
+    pred_mean_1=[]
+    target_mean_1=[]
     pred_mean_2=[]
     target_mean_2=[]
     for i, (input,target) in enumerate(val_loader):
@@ -265,52 +266,52 @@ def validate(val_loader,net_classification_2,generate_model,criterion,epoch,writ
         # compute output
 
 
-        # output_1 = net_classification_1(input_var)
+        output_1 = net_classification_1(input_var)
         output_2 = net_classification_2(depth_var)
-        # loss_1 = criterion(output_1,target)
+        loss_1 = criterion(output_1,target)
         loss_2 = criterion(output_2,target)
 
         # measure accuracy and record loss
-        # prec1_1, prec5_1,pred_mean_ac_1,target_mean_ac_1= accuracy(output_1.data, target, topk=(1,5) )
+        prec1_1, prec5_1,pred_mean_ac_1,target_mean_ac_1= accuracy(output_1.data, target, topk=(1,5) )
         prec1_2, prec5_2,pred_mean_ac_2,target_mean_ac_2= accuracy(output_2.data, target, topk=(1,5) )
 
-        # losses_1.update(loss_1.data.item(), input.size(0))
-        # top1_1.update(prec1_1.item(), input.size(0))
-        # top5_1.update(prec5_1.item(), input.size(0))
+        losses_1.update(loss_1.data.item(), input.size(0))
+        top1_1.update(prec1_1.item(), input.size(0))
+        top5_1.update(prec5_1.item(), input.size(0))
 
         losses_2.update(loss_2.data.item(), input.size(0))
         top1_2.update(prec1_2.item(), input.size(0))
         top5_2.update(prec5_2.item(), input.size(0))
 
-        # pred_mean_1.extend(pred_mean_ac_1)
-        # target_mean_1.extend(target_mean_ac_1)
+        pred_mean_1.extend(pred_mean_ac_1)
+        target_mean_1.extend(target_mean_ac_1)
         pred_mean_2.extend(pred_mean_ac_2)
         target_mean_2.extend(target_mean_ac_2)
 
         if i % 40 == 0:
             print(('Test: [{0}]\t'
-                  # 'Loss_color {loss_1.val:.4f} ({loss_1.avg:.4f})\t'
-                  # 'acc_color {top1_1.val:.3f} ({top1_1.avg:.3f})\t'
+                  'Loss_color {loss_1.val:.4f} ({loss_1.avg:.4f})\t'
+                  'acc_color {top1_1.val:.3f} ({top1_1.avg:.3f})\t'
                   'Loss_depth {loss_2.val:.4f} ({loss_2.avg:.4f})\t'
                   'acc_depth {top1_2.val:.3f} ({top1_2.avg:.3f})'.format(
                    i, 
-                   # loss_1=losses_1, top1_1=top1_1,
+                   loss_1=losses_1, top1_1=top1_1,
                    loss_2=losses_2, top1_2=top1_2)))
 
-    # mean_acc_all_1=mean_acc(np.array(target_mean_1),np.array(pred_mean_1),67)
+    mean_acc_all_1=mean_acc(np.array(target_mean_1),np.array(pred_mean_1),67)
     mean_acc_all_2=mean_acc(np.array(target_mean_2),np.array(pred_mean_2),67)
 
-    # writer.add_scalar('val_loss_color', losses_1.avg, global_step=epoch)
+    writer.add_scalar('val_loss_color', losses_1.avg, global_step=epoch)
     writer.add_scalar('val_loss_depth', losses_2.avg, global_step=epoch)
-    # print(('Testing Results_color: Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f} Loss {loss.avg:.5f}'
-          # .format(top1=top1_1, top5=top5_1, loss=losses_1)))
+    print(('Testing Results_color: Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f} Loss {loss.avg:.5f}'
+          .format(top1=top1_1, top5=top5_1, loss=losses_1)))
     print(('Testing Results_depth: Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f} Loss {loss.avg:.5f}'
           .format(top1=top1_2, top5=top5_2, loss=losses_2)))
 
-    # print('mean_acc_color: ',str(mean_acc_all_1),'------------mean_acc_depth: ',str(mean_acc_all_2))
-    print('------------mean_acc_depth: ',str(mean_acc_all_2))
+    print('mean_acc_color: ',str(mean_acc_all_1),'------------mean_acc_depth: ',str(mean_acc_all_2))
+    # print('------------mean_acc_depth: ',str(mean_acc_all_2))
 
-    return mean_acc_all_2
+    return mean_acc_all_1,mean_acc_all_2
 
 def build_output_keys(gen_img=True):
 
@@ -321,19 +322,19 @@ def build_output_keys(gen_img=True):
         return out_keys
 
 
-def adjust_learning_rate(optimizer2,epoch):
+def adjust_learning_rate(optimizer1,optimizer2,epoch):
     """Sets the learning rate to the initial LR decayed by 10 every 100 epochs"""
-    if epoch < 20:
-        lr = cfg.LR
-    elif epoch >= 20 and epoch < 100:
-        lr = cfg.LR * 0.9
-        cfg.LR=lr
+    # if epoch < 10:
+    #     lr = cfg.LR
+    # elif epoch >= 10 and epoch < 100:
+    lr = cfg.LR * 0.9
+    cfg.LR=lr
     print('-----------------------lr:',str(lr),'---------------------------')
-    #lr = args.lr * (0.1 ** (epoch // 100))
-    # for param_group in optimizer1.param_groups:
-    #     param_group['lr'] = lr
-    for param_group in optimizer2.param_groups:
+    # lr = args.lr * (0.1 ** (epoch // 100))
+    for param_group in optimizer1.param_groups:
         param_group['lr'] = lr
+    for param_group in optimizer2.param_groups:
+        param_group['lr'] = lr*1.5
 def accuracy(output, target,topk=(1,)):
     """Computes the precision@k for the specified values of k"""
     pred_mean=[]
@@ -396,9 +397,9 @@ class AverageMeter(object):
     #     writer.close()
 def save_checkpoint(state, CorD):
     if CorD:
-        filename='_resnext101_Color_model_82600001_nouse_pretrain_best.pth.tar'
+        filename='_resnext101_Color___best.pth.tar'
     else:
-        filename='_resnext101_Depth_8260001_single_pretrain_best.pth.tar'
+        filename='_resnext101_Depth___best.pth.tar'
     torch.save(state, filename)
 
 def load_checkpoint_depth(net, checkpoint_path, checkpoint, optimizer=None, data_para=True):
