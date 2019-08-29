@@ -52,12 +52,12 @@ class ReD_Model(nn.Module):
 
 		self.net_classification_1=torch.hub.load('facebookresearch/WSL-Images', 'resnext101_32x16d_wsl')
 		self.net_classification_2=torch.hub.load('facebookresearch/WSL-Images', 'resnext101_32x16d_wsl')
-		self.net_classification_1.fc = nn.Sequential(nn.Dropout(p=0.5),nn.Linear(2048, 1024),nn.LeakyReLU(inplace=True),nn.Linear(1024,67),nn.Softmax(dim=1))
-		self.net_classification_2.fc = nn.Sequential(nn.Dropout(p=0.5),nn.Linear(2048, 1024),nn.LeakyReLU(inplace=True),nn.Linear(1024,67),nn.Softmax(dim=1))
+		self.net_classification_1.fc = nn.Sequential(nn.Dropout(p=0.5),nn.Linear(2048, 1024),nn.LeakyReLU(inplace=True),nn.Linear(1024,67))
+		self.net_classification_2.fc = nn.Sequential(nn.Dropout(p=0.5),nn.Linear(2048, 1024),nn.LeakyReLU(inplace=True),nn.Linear(1024,67))
 
 
 		print(("=> loading checkpoint '{}'".format('Color_model_best.pth.tar')))
-		checkpoint = torch.load('/home/lzy/generateDepth/color_best.pth.tar')
+		checkpoint = torch.load('/home/lzy/generateDepth/0828resnext101_Color___best.pth.tar')
 		best_mean_color = checkpoint['best_mean_1']
 		new_state_dict = OrderedDict()
 		for k, v in checkpoint['state_dict'].items():
@@ -71,33 +71,37 @@ class ReD_Model(nn.Module):
 		# num_ftrs = self.net_classification_2.fc.in_features
 		# self.net_classification_2.fc = nn.Linear(num_ftrs, self.cfg.NUM_CLASSES)
 		print(("=> loading checkpoint '{}'".format('Depth_model_best.pth.tar')))
-		checkpoint = torch.load('/home/lzy/generateDepth/depth_best.pth.tar')
+		checkpoint = torch.load('/home/lzy/generateDepth/0829resnext101_Depth___best.pth.tar')
 		best_mean_depth = checkpoint['best_mean_2']
 		for k, v in checkpoint['state_dict'].items():
 		    name = k[7:]
 		    new_state_dict[name] = v
 		self.net_classification_2.load_state_dict(new_state_dict)
 		print('best_mean_depth:',best_mean_depth)
-
-
-
-		self.net_classification_1 = nn.Sequential(*list(self.net_classification_1.children())[:-1])
-		self.net_classification_2 = nn.Sequential(*list(self.net_classification_2.children())[:-1])
+		
+		self.net_classification_1 = nn.Sequential(*list(self.net_classification_1.children())[:-2])
+		self.net_classification_2 = nn.Sequential(*list(self.net_classification_2.children())[:-2])
 		# fix_grad(self.net_classification_1)
 		# fix_grad(self.net_classification_2)
-		# self.net_classification_1=self.construct_single_modal_net(self.net_classification_1)
-		# self.net_classification_2=self.construct_single_modal_net(self.net_classification_2)
-		# self.avgpool = nn.AvgPool2d(14, 1)
-		self.fc = nn.Sequential(nn.Dropout(p=0.5),nn.Linear(4096, 1024),nn.LeakyReLU(inplace=True),nn.Linear(1024,67),nn.Softmax(dim=1))
+		# # print(self.net_classification_1)
+		# # self.net_classification_1=self.construct_single_modal_net(self.net_classification_1)
+		# # self.net_classification_2=self.construct_single_modal_net(self.net_classification_2)
+		self.avgpool = nn.AdaptiveAvgPool2d(output_size=(1, 1))
+		# # self.fc_1=nn.Linear(4096,1024)
+		# # # self.fc_1=nn.Linear(2048,1024)
+		# # self.fc_0=nn.Linear(1024,self.cfg.NUM_CLASSES)
+		# # init_weights(self.fc_1, 'normal')
+		# # # init_weights(self.fc_1, 'normal')
+		# # init_weights(self.fc_0, 'normal')
+		self.fc = nn.Sequential(nn.Dropout(p=0.5),nn.Linear(4096, 1024),nn.LeakyReLU(inplace=True),nn.Linear(1024,67))
 		init_weights(self.fc, 'normal')
 
 		# print(self.net_classification_1)
-
 		# num_ftrs = self.net_classification_1.fc.in_features
 		# self.net_classification_1.fc = nn.Linear(num_ftrs, self.cfg.NUM_CLASSES)
 		# num_ftrs = self.net_classification_2.fc.in_features
 		# self.net_classification_2.fc = nn.Linear(num_ftrs, self.cfg.NUM_CLASSES)
-		# self.fc_1=nn.Linear(134,67)
+		# self.fc=nn.Linear(134,67)
 		# self.fc_0=nn.Linear(67,self.cfg.NUM_CLASSES)
 	# def construct_single_modal_net(self, model):
 	#     if isinstance(model, nn.DataParallel):
@@ -110,14 +114,24 @@ class ReD_Model(nn.Module):
 
 		baseout_1=self.net_classification_1(input)
 		baseout_2=self.net_classification_2(depth_image)
-		# output=0.5*(baseout_1+baseout_2)
-		baseout_1=baseout_1.view(baseout_1.size(0),-1)
-		baseout_2=baseout_2.view(baseout_2.size(0),-1)
-		baseout_final=torch.cat((baseout_1,baseout_2), 1)
 
-		# output_0=self.avgpool(baseout_final)
-		# print(output_0.size())
+		# print(baseout_1)
+		# print(baseout_2)
+
+		# output=baseout_1+0.2*baseout_2
+		# baseout_final=baseout_2
+		# output=torch.max(0*baseout_1,baseout_2)
+		# print('baseout_1:',baseout_1)
+		# print('baseout_2:',baseout_2)
+		# print('output:',output)
+		baseout_final=torch.cat((baseout_1,baseout_2),1)
+		baseout_final=self.avgpool(baseout_final)
+		baseout_final=baseout_final.view(baseout_final.size(0),-1)
+
+		# # # print(output_0.size())
+		# # # output=self.fc_0(self.fc_1(baseout_final))
 		output=self.fc(baseout_final)
+
 
 		return output
 	def get_optim_policies(self):
@@ -180,4 +194,6 @@ def fix_grad(net):
                 m.bias.requires_grad = False
 
     net.apply(fix_func)
+
+
 
