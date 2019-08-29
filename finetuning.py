@@ -19,9 +19,7 @@ from model.networks import define_TrecgNet
 from torchvision.models.resnet import *
 import copy
 import numpy as np
-from redefineModel_fusion import ReD_Model
-# from redefineModel_test import ReD_Model
-
+from redefineModel import ReD_Model
 
 def main():
     global cfg
@@ -32,10 +30,10 @@ def main():
 
     # args for different backbones
     cfg.parse(args['resnet18'])
-    cfg.LR=1e-3
+    cfg.LR=1e-4
     cfg.EPOCHS=200
     # print('cfg.EPOCHS:',cfg.EPOCHS)
-    os.environ["CUDA_VISIBLE_DEVICES"] = '0,1,2,3'
+    os.environ["CUDA_VISIBLE_DEVICES"] = '0,1'
 
     # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
     #                                 std=[0.229, 0.224, 0.225])
@@ -65,7 +63,7 @@ def main():
     val_loader = DataProvider(cfg, dataset=val_dataset, batch_size=5, shuffle=False)
 
     run_id = random.randint(1, 100000)
-    summary_dir='/home/lzy/summary/generateDepth/'+'finetuning_'+str(run_id)
+    summary_dir='/home/lzy/summary/generateDepth/'+'finetuning_nofix_'+str(run_id)
     if not os.path.exists(summary_dir):
         os.mkdir(summary_dir)
     writer = SummaryWriter(summary_dir)
@@ -94,7 +92,7 @@ def main():
                             momentum=cfg.MOMENTUM,
                             weight_decay=cfg.WEIGHT_DECAY)
 
-    for epoch in range(cfg.START_EPOCH,cfg.EPOCHS+1 ):
+    for epoch in range(cfg.START_EPOCH,cfg.EPOCHS+1):
         adjust_learning_rate(optimizer, epoch)
         # mean_acc=validate(val_loader,model,criterion,generate_model,epoch,writer)
 
@@ -104,7 +102,7 @@ def main():
             best_mean=mean_acc
             print('best mean accuracy:',best_mean)
         else:
-        	print('best mean accuracy:',best_mean)
+            print('best mean accuracy:',best_mean)
         writer.add_scalar('mean_acc_color', mean_acc, global_step=epoch)
         writer.add_scalar('best_meanacc_color', best_mean, global_step=epoch)
     writer.close()
@@ -225,7 +223,7 @@ def adjust_learning_rate(optimizer, epoch):
     if epoch <=10:
         lr = cfg.LR
     else:
-        lr = cfg.LR * 0.9
+        lr = cfg.LR * 0.90
         cfg.LR=lr
     print('-----------------------lr:',str(lr),'---------------------------')
 
@@ -252,6 +250,7 @@ def accuracy(output, target,topk=(1,)):
 
 def mean_acc(target_indice, pred_indice, num_classes, classes=None):
     acc = 0.
+    printresult=[]
     result=np.zeros(num_classes)
     result_all=np.zeros(num_classes)
     for i in range(len(target_indice)):
@@ -260,6 +259,8 @@ def mean_acc(target_indice, pred_indice, num_classes, classes=None):
         result_all[target_indice[i]]+=1
     for i in range(num_classes):
         acc+=result[i]*1.0/result_all[i]
+        printresult.append(result[i]*1.0/result_all[i])
+    print(printresult)
     return (acc / num_classes) * 100
 
 class AverageMeter(object):
